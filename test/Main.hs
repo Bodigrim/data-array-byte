@@ -1,8 +1,10 @@
 -- Derived from @primitive@ package.
 
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
-
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+{- HLINT ignore "Redundant compare" -}
 
 import Control.Monad (when, unless)
 import Data.Array.Byte (ByteArray)
@@ -14,7 +16,7 @@ import GHC.Exts (IsList(..))
 import Language.Haskell.TH.Syntax (lift)
 import Test.QuickCheck.Classes.Base (eqLaws, ordLaws, monoidLaws, showLaws, isListLaws, semigroupLaws, semigroupMonoidLaws, Laws(..))
 import Test.Tasty (defaultMain, testGroup, TestTree)
-import Test.Tasty.QuickCheck (testProperty, Arbitrary(..), (===), Property, NonNegative(..), property)
+import Test.Tasty.QuickCheck (testProperty, (===), Property, NonNegative(..), property, Arbitrary(..))
 
 main :: IO ()
 main = do
@@ -23,13 +25,13 @@ main = do
     [ testProperty "equality" byteArrayEqProp
     , testProperty "reflexivity" byteArrayReflexivityProp
     , testProperty "compare" byteArrayCompareProp
-    , lawsToTest (eqLaws (Proxy :: Proxy ByteArray))
-    , lawsToTest (ordLaws (Proxy :: Proxy ByteArray))
-    , lawsToTest (monoidLaws (Proxy :: Proxy ByteArray))
-    , lawsToTest (showLaws (Proxy :: Proxy ByteArray))
-    , lawsToTest (isListLaws (Proxy :: Proxy ByteArray))
-    , lawsToTest (semigroupLaws (Proxy :: Proxy ByteArray))
-    , lawsToTest (semigroupMonoidLaws (Proxy :: Proxy ByteArray))
+    , lawsToTest (eqLaws (Proxy :: Proxy MyByteArray))
+    , lawsToTest (ordLaws (Proxy :: Proxy MyByteArray))
+    , lawsToTest (monoidLaws (Proxy :: Proxy MyByteArray))
+    , lawsToTest (showLaws (Proxy :: Proxy MyByteArray))
+    , lawsToTest (isListLaws (Proxy :: Proxy MyByteArray))
+    , lawsToTest (semigroupLaws (Proxy :: Proxy MyByteArray))
+    , lawsToTest (semigroupMonoidLaws (Proxy :: Proxy MyByteArray))
     , testProperty "stimes" byteArrayStimesProp
     , testProperty "lift" byteArrayLiftProp
     ]
@@ -49,8 +51,8 @@ byteArrayReflexivityProp xs = property $
 compareLengthFirst :: [Word8] -> [Word8] -> Ordering
 compareLengthFirst xs ys = (compare `on` length) xs ys <> compare xs ys
 
-byteArrayStimesProp :: NonNegative Int -> ByteArray -> Property
-byteArrayStimesProp (NonNegative n) xs = stimes n xs === stimesMonoid n xs
+byteArrayStimesProp :: NonNegative Int -> MyByteArray -> Property
+byteArrayStimesProp (NonNegative n) (MyByteArray xs) = stimes n xs === stimesMonoid n xs
 
 byteArrayLiftProp :: Property
 byteArrayLiftProp =
@@ -72,20 +74,28 @@ testByteArray = do
     when (show arr6 /= "[0xde, 0xad, 0x00, 0x01, 0xb0]") $
         fail $ "ByteArray Show incorrect: " ++ show arr6
     unless (arr1 > arr3) $
-        fail $ "ByteArray Ord incorrect"
+        fail "ByteArray Ord incorrect"
     unless (arr1 == arr2) $
-        fail $ "ByteArray Eq incorrect"
+        fail "ByteArray Eq incorrect"
     unless (mappend arr1 arr4 == arr5) $
-        fail $ "ByteArray Monoid mappend incorrect"
+        fail "ByteArray Monoid mappend incorrect"
     unless (mappend arr1 (mappend arr3 arr4) == mappend (mappend arr1 arr3) arr4) $
-        fail $ "ByteArray Monoid mappend not associative"
+        fail "ByteArray Monoid mappend not associative"
     unless (mconcat [arr1, arr2, arr3, arr4, arr5] == (arr1 <> arr2 <> arr3 <> arr4 <> arr5)) $
-        fail $ "ByteArray Monoid mconcat incorrect"
+        fail "ByteArray Monoid mconcat incorrect"
     unless (stimes (3 :: Int) arr4 == (arr4 <> arr4 <> arr4)) $
-        fail $ "ByteArray Semigroup stimes incorrect"
+        fail "ByteArray Semigroup stimes incorrect"
 
-instance Arbitrary ByteArray where
-  arbitrary = mkByteArray <$> arbitrary
+newtype MyByteArray = MyByteArray ByteArray
+  deriving (Eq, Ord, Semigroup, Monoid, Show)
+
+instance IsList MyByteArray where
+    type Item MyByteArray = Item ByteArray
+    fromList = MyByteArray . fromList
+    toList (MyByteArray ba) = toList ba
+
+instance Arbitrary MyByteArray where
+  arbitrary = MyByteArray . mkByteArray <$> arbitrary
 
 mkByteArray :: [Word8] -> ByteArray
 mkByteArray = fromList
