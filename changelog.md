@@ -1,3 +1,7 @@
+# 0.1.0.2
+
+* Update tests.
+
 # 0.1.0.1
 
 * Relax required `cabal-version` to 1.10.
